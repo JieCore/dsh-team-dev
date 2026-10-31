@@ -1,0 +1,42 @@
+{
+  "name": "dsh-team-dev",
+  "version": "0.1.0",
+  "description": "Self-contained Dev Team bundle for DeepSeek Harness: a per-agent step-budget guard plus the bundled team-dev and team-boot skills.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "skills/",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "export": "node scripts/export-to-harness.mjs",
+    "verify": "node scripts/verify.mjs",
+    "pack": "pnpm pack"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/li906912102/dsh-team-dev.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/li906912102/dsh-team-dev#readme",
+  "bugs": {
+    "url": "https://github.com/li906912102/dsh-team-dev/issues"
+  }
+}
