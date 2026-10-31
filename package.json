@@ -1,5 +1,5 @@
 {
-  "name": "dsh-team-dev",
+  "name": "@jiecore/dsh-team-dev",
   "version": "0.1.0",
   "description": "Self-contained Dev Team bundle for DeepSeek Harness: a per-agent step-budget guard plus the bundled team-dev and team-boot skills.",
   "type": "module",
