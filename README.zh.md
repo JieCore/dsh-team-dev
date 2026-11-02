@@ -13,10 +13,10 @@
 
 ```bash
 # 1. 在 profile 的 package.json 增加依赖
-#    "@jiecore/dsh-team-dev": "file:/绝对路径/jiecore-dsh-team-dev-0.1.0.tgz"
+#    "@jiecore/dsh-team-dev": "file:/绝对路径/dsh-team-dev-0.1.0.tgz"
 #    或发布后使用 git/npm 声明
 # 2. 在 dsh.profile.bundles 里列出该 bundle（package.json）
-#    "dsh.profile.bundles": [..., "@jiecore/dsh-team-dev"]
+#    "dsh.profile.bundles": [..., "dsh-team-dev"]
 # 3. 重新安装并重启 DSH
 cd "$DSH_HOME/profiles/web" && pnpm install
 ```
@@ -28,10 +28,10 @@ cd "$DSH_HOME/profiles/web" && pnpm install
 ```yaml
 - insert:
     - id: dsh-team-dev
-      name: '@jiecore/dsh-team-dev'
+      name: dsh-team-dev
 ```
 
-并在 profile 的 `package.json` 加入 `@jiecore/dsh-team-dev` 依赖，重新安装、重启。
+并在 profile 的 `package.json` 加入 `dsh-team-dev` 依赖，重新安装、重启。
 
 ## 验证
 
@@ -94,7 +94,7 @@ DSH 市场支持两条收录渠道：
 
    ```bash
    npm login            # 仅一次；用你自己的账号
-   npm publish          # 发布 @jiecore/dsh-team-dev@0.1.0
+   npm publish          # 发布 dsh-team-dev@0.1.0
    ```
 
 2. **GitHub 镜像（可选）**——公开 GitHub 仓库会进入市场的 `github:` 兼容清单，同时作为源码页。
