@@ -4,4 +4,4 @@
 # (`dsh-team-dev`), or remove the bundle line to uninstall.
 - insert:
     - id: dsh-team-dev
-      name: '@jiecore/dsh-team-dev'
+      name: dsh-team-dev
