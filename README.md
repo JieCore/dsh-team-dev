@@ -13,10 +13,10 @@ Zero runtime dependencies.
 
 ```bash
 # 1. add the dependency to the profile's package.json
-#    "@jiecore/dsh-team-dev": "file:/absolute/path/to/jiecore-dsh-team-dev-0.1.0.tgz"
+#    "@jiecore/dsh-team-dev": "file:/absolute/path/to/dsh-team-dev-0.1.0.tgz"
 #    or a git/npm specifier once published
 # 2. list the bundle in dsh.profile.bundles (package.json)
-#    "dsh.profile.bundles": [..., "@jiecore/dsh-team-dev"]
+#    "dsh.profile.bundles": [..., "dsh-team-dev"]
 # 3. reinstall the profile and restart DSH
 cd "$DSH_HOME/profiles/web" && pnpm install
 ```
@@ -28,10 +28,10 @@ Append to the profile's `cordis.patch.yml`:
 ```yaml
 - insert:
     - id: dsh-team-dev
-      name: '@jiecore/dsh-team-dev'
+      name: dsh-team-dev
 ```
 
-and add the `@jiecore/dsh-team-dev` dependency to the profile's `package.json`, then reinstall and restart.
+and add the `dsh-team-dev` dependency to the profile's `package.json`, then reinstall and restart.
 
 ## Verify
 
@@ -103,7 +103,7 @@ Two channels, both supported by the DSH market:
 
    ```bash
    npm login            # once; your own account
-   npm publish          # publishes @jiecore/dsh-team-dev@0.1.0
+   npm publish          # publishes dsh-team-dev@0.1.0
    ```
 
 2. **GitHub mirror (optional)** — a public GitHub repo enters the market's
