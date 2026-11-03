@@ -1,6 +1,6 @@
 {
   "name": "dsh-team-dev",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Self-contained Dev Team bundle for DeepSeek Harness: a per-agent step-budget guard plus the bundled team-dev and team-boot skills.",
   "type": "module",
   "main": "lib/index.js",
@@ -30,13 +30,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/li906912102/dsh-team-dev.git"
+    "url": "git+https://github.com/JieCore/dsh-team-dev.git"
   },
   "publishConfig": {
     "access": "public"
   },
-  "homepage": "https://github.com/li906912102/dsh-team-dev#readme",
+  "homepage": "https://github.com/JieCore/dsh-team-dev#readme",
   "bugs": {
-    "url": "https://github.com/li906912102/dsh-team-dev/issues"
+    "url": "https://github.com/JieCore/dsh-team-dev/issues"
   }
 }
