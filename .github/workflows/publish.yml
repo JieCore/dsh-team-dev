@@ -1,0 +1,28 @@
+# Publish to npm via Trusted Publishing (OIDC) — no long-lived tokens.
+# Configure once on the npm package page:
+#   npmjs.com → package → Settings → Trusted Publishing
+#   → GitHub Actions: owner=JieCore, repo=dsh-team-dev, workflow=publish.yml
+name: publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      # Trusted Publishing needs npm >= 11.5.1 for the OIDC exchange.
+      - run: npm install -g npm@latest
+      - run: node scripts/verify.mjs
+      - run: npm publish --provenance --access public
