@@ -37,6 +37,7 @@ and add the `dsh-team-dev` dependency to the profile's `package.json`, then rein
 ## Team board / multiple teams (v0.2)
 
 - Open the **Team board** tab in the Web UI's right sidebar (the tab appears when the profile includes the default `ui-sidebar-right` plugin, which the stock Web app does).
+- The board has two views, switched by the segmented control at the top: **Current session** (the team of the conversation you are in) and **All teams** (v0.2.1 — every online team on one screen: task total / in-progress / completed stats, progress bars, status badges, sort by in-progress / task count / name, status filter and search by lead or session id). Clicking **Open board** on a team card jumps straight to that team's board without switching conversations.
 - One root conversation = one implicit Agent Team (`TeamId = root SessionId`). Open several conversations in parallel and you get several independent teams; the board's team selector lists them all and defaults to the team of the current session.
 - The board is **read-only**: task creation/claim/update still go through the Agent Teams tools (`team_task_*`). It refreshes every 5 s, pauses while the tab is hidden, backs off to 5/15/30 s on failures, and cancels in-flight requests on switch/refresh.
 - Details are served by `/api/dsh-team-dev/teams/<teamId>`: because the host route registry matches exact paths, the host registers one exact route per live team after each team-list request (a `?teamId=` query fallback exists for the same data).

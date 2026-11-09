@@ -19,6 +19,7 @@ import {
   taskTotal,
 } from './api.js'
 import { styles } from './styles.js'
+import { Overview } from './Overview.jsx'
 
 /** 三列状态；labelKey 指向 locale 字典键。 */
 const COLUMNS = [
@@ -164,6 +165,7 @@ export function TeamBoard(props) {
   const t = props.t
   const sessionId = props.sessionId
   const [snapshot, setSnapshot] = useState(INITIAL_SNAPSHOT)
+  const [view, setView] = useState('session')
   const [completedOpen, setCompletedOpen] = useState(false)
   const [memberFilter, setMemberFilter] = useState(null)
   const [expandedTaskId, setExpandedTaskId] = useState(null)
@@ -354,6 +356,19 @@ export function TeamBoard(props) {
     refreshRef.current()
   }
 
+  /**
+   * 总览卡片点击：切回「当前会话」视图并定位到该团队。
+   * 团队可能属于别的会话，manual 选择优先于默认的「当前会话团队」算法。
+   * @param nextTeamId - 目标团队 id。
+   */
+  const handleOpenTeam = nextTeamId => {
+    if (!nextTeamId) return
+    manualRef.current = true
+    selectedRef.current = nextTeamId
+    setView('session')
+    handleRefresh()
+  }
+
   const handleSelectTeam = event => {
     const nextTeamId = event.target.value
     if (!nextTeamId) return
@@ -478,16 +493,23 @@ export function TeamBoard(props) {
 
   return (
     <div style={styles.root}>
-      <div style={styles.toolbar}>
-        <label style={styles.selectorLabel}>
-          {t('team.selector')}
-          <select style={styles.select} value={teamId || ''} onChange={handleSelectTeam}>
-            {teams.length === 0 ? <option value="">{t('team.none')}</option> : null}
-            {teams.map(item => (
-              <option key={item.teamId} value={item.teamId}>{teamOptionLabel(item, t)}</option>
-            ))}
-          </select>
-        </label>
+      <div style={styles.topbar}>
+        <div style={styles.viewSwitch}>
+          <button
+            type="button"
+            style={view === 'session' ? { ...styles.viewSwitchButton, ...styles.viewSwitchButtonActive } : styles.viewSwitchButton}
+            onClick={() => setView('session')}
+          >
+            {t('view.session')}
+          </button>
+          <button
+            type="button"
+            style={view === 'all' ? { ...styles.viewSwitchButton, ...styles.viewSwitchButtonActive } : styles.viewSwitchButton}
+            onClick={() => setView('all')}
+          >
+            {t('view.all')}
+          </button>
+        </div>
         <button
           type="button"
           style={refreshing ? { ...styles.button, ...styles.buttonDisabled } : styles.button}
@@ -498,18 +520,42 @@ export function TeamBoard(props) {
         </button>
         {updatedAt ? <span style={styles.updated}>{`${t('updated')}${formatTime(updatedAt)}`}</span> : null}
       </div>
-      {errorMessage && activeTeam ? (
-        <div style={styles.banner}>
-          <span style={styles.bannerText}>{errorMessage}</span>
-          <button type="button" style={styles.linkButton} onClick={handleRefresh}>{t('retry')}</button>
-        </div>
-      ) : null}
-      {teamGone ? (
-        <div style={styles.banner}>
-          <span style={styles.bannerText}>{t('error.teamGone')}</span>
-        </div>
-      ) : null}
-      {content}
+      {view === 'all' ? (
+        <Overview
+          teams={teams}
+          sessionId={sessionId}
+          t={t}
+          loading={status === 'loading'}
+          degraded={degraded}
+          onOpenTeam={handleOpenTeam}
+        />
+      ) : (
+        <>
+          <div style={styles.toolbar}>
+            <label style={styles.selectorLabel}>
+              {t('team.selector')}
+              <select style={styles.select} value={teamId || ''} onChange={handleSelectTeam}>
+                {teams.length === 0 ? <option value="">{t('team.none')}</option> : null}
+                {teams.map(item => (
+                  <option key={item.teamId} value={item.teamId}>{teamOptionLabel(item, t)}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {errorMessage && activeTeam ? (
+            <div style={styles.banner}>
+              <span style={styles.bannerText}>{errorMessage}</span>
+              <button type="button" style={styles.linkButton} onClick={handleRefresh}>{t('retry')}</button>
+            </div>
+          ) : null}
+          {teamGone ? (
+            <div style={styles.banner}>
+              <span style={styles.bannerText}>{t('error.teamGone')}</span>
+            </div>
+          ) : null}
+          {content}
+        </>
+      )}
     </div>
   )
 }
