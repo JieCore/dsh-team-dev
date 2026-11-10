@@ -195,6 +195,25 @@ export const styles = {
   cardTitle: {
     fontWeight: 600,
     wordBreak: 'break-word',
+    flex: '1 1 auto',
+    minWidth: 0,
+  },
+  cardHead: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  cardToggle: {
+    flex: '0 0 auto',
+    padding: '0 2px',
+    border: 'none',
+    background: 'transparent',
+    color: muted,
+    font: 'inherit',
+    fontSize: 11,
+    textDecoration: 'underline',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
   },
   chipRow: {
     display: 'flex',
@@ -223,16 +242,6 @@ export const styles = {
     borderRadius: 999,
     color: faint,
     whiteSpace: 'nowrap',
-  },
-  cardActions: {
-    alignSelf: 'flex-start',
-    padding: 0,
-    border: 'none',
-    background: 'transparent',
-    color: muted,
-    fontSize: 11,
-    textDecoration: 'underline',
-    cursor: 'pointer',
   },
   details: {
     display: 'flex',
@@ -506,7 +515,9 @@ export const styles = {
   },
   overviewBadgeCurrent: {
     marginLeft: 6,
-    color: muted,
+    color: '#60a5fa',
+    borderColor: 'rgba(96, 165, 250, 0.55)',
+    background: 'rgba(96, 165, 250, 0.12)',
   },
   overviewMembers: {
     display: 'flex',
@@ -599,5 +610,18 @@ export const styles = {
     background: surface,
     color: muted,
     fontSize: 12,
+  },
+  /* ---------- v0.2.2 当前会话标识 ---------- */
+  currentHint: {
+    fontSize: 11,
+    color: muted,
+    border: softLine,
+    borderRadius: 999,
+    padding: '2px 8px',
+    whiteSpace: 'nowrap',
+  },
+  currentNote: {
+    fontSize: 11,
+    color: faint,
   },
 }

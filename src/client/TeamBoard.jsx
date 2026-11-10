@@ -17,6 +17,7 @@ import {
   pickTeamId,
   shortTeamId,
   taskTotal,
+  teamMatchesSession,
 } from './api.js'
 import { styles } from './styles.js'
 import { Overview } from './Overview.jsx'
@@ -69,15 +70,18 @@ function describeError(error, t) {
 
 /**
  * 团队下拉选项文案：lead 名 + 短 teamId + 成员数/任务数（不虚构团队标题）。
+ * 当前会话团队追加「当前会话」标记，方便在多个同 Lead 团队之间辨认。
  * @param team - /teams 返回的团队列表项。
  * @param t - 翻译函数。
+ * @param current - 是否为当前会话所属团队。
  * @returns 单行选项文案。
  */
-function teamOptionLabel(team, t) {
+function teamOptionLabel(team, t, current = false) {
   const lead = team.leadName || 'lead'
   const memberCount = Array.isArray(team.members) ? team.members.length : (Number(team.memberCount) || 0)
   const total = taskTotal(team.taskCounts)
-  return `${lead} · ${shortTeamId(team.teamId)} · ${memberCount}${t('unit.member')} · ${total}${t('unit.task')}`
+  const suffix = current ? ` · ${t('team.current')}` : ''
+  return `${lead} · ${shortTeamId(team.teamId)} · ${memberCount}${t('unit.member')} · ${total}${t('unit.task')}${suffix}`
 }
 
 /**
@@ -113,7 +117,12 @@ function TaskCard({ task, t, expanded, onToggle }) {
   const owner = task.ownerName || t('task.unassigned')
   return (
     <div style={styles.card}>
-      <div style={styles.cardTitle}>{task.subject || t('task.untitled')}</div>
+      <div style={styles.cardHead}>
+        <div style={styles.cardTitle}>{task.subject || t('task.untitled')}</div>
+        <button type="button" style={styles.cardToggle} onClick={onToggle}>
+          {expanded ? t('task.collapse') : t('task.details')}
+        </button>
+      </div>
       <div style={styles.chipRow}>
         <span style={styles.ownerChip}>{owner}</span>
         {task.ready === false ? (
@@ -148,9 +157,6 @@ function TaskCard({ task, t, expanded, onToggle }) {
           ) : null}
         </div>
       ) : null}
-      <button type="button" style={styles.cardActions} onClick={onToggle}>
-        {expanded ? t('task.collapse') : t('task.details')}
-      </button>
     </div>
   )
 }
@@ -352,6 +358,12 @@ export function TeamBoard(props) {
     return list
   }, [activeTeam])
 
+  // 当前会话所属团队：teamId/leadSessionId 命中，或当前会话是某团队成员。
+  const currentTeamId = useMemo(() => {
+    const match = teams.find(item => teamMatchesSession(item, sessionId))
+    return match ? match.teamId : null
+  }, [teams, sessionId])
+
   const handleRefresh = () => {
     refreshRef.current()
   }
@@ -374,6 +386,14 @@ export function TeamBoard(props) {
     if (!nextTeamId) return
     manualRef.current = true
     selectedRef.current = nextTeamId
+    handleRefresh()
+  }
+
+  /** 从其它团队的看板一键跳回当前会话团队。 */
+  const handleBackToCurrent = () => {
+    if (!currentTeamId) return
+    manualRef.current = false
+    selectedRef.current = currentTeamId
     handleRefresh()
   }
 
@@ -537,11 +557,27 @@ export function TeamBoard(props) {
               <select style={styles.select} value={teamId || ''} onChange={handleSelectTeam}>
                 {teams.length === 0 ? <option value="">{t('team.none')}</option> : null}
                 {teams.map(item => (
-                  <option key={item.teamId} value={item.teamId}>{teamOptionLabel(item, t)}</option>
+                  <option key={item.teamId} value={item.teamId}>
+                    {teamOptionLabel(item, t, item.teamId === currentTeamId)}
+                  </option>
                 ))}
               </select>
             </label>
+            {currentTeamId && teamId === currentTeamId ? (
+              <span style={styles.currentHint}>{t('team.current')}</span>
+            ) : null}
           </div>
+          {currentTeamId !== null && teamId !== null && teamId !== currentTeamId ? (
+            <div style={styles.banner}>
+              <span style={styles.bannerText}>{t('team.notCurrent')}</span>
+              <button type="button" style={styles.linkButton} onClick={handleBackToCurrent}>
+                {t('team.backToCurrent')}
+              </button>
+            </div>
+          ) : null}
+          {status === 'ready' && teams.length > 0 && currentTeamId === null ? (
+            <div style={styles.currentNote}>{t('team.noCurrent')}</div>
+          ) : null}
           {errorMessage && activeTeam ? (
             <div style={styles.banner}>
               <span style={styles.bannerText}>{errorMessage}</span>

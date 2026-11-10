@@ -1,6 +1,6 @@
 {
   "name": "dsh-team-dev",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Self-contained Dev Team bundle for DeepSeek Harness: a per-agent step-budget guard, bundled team-dev/team-boot skills with built-in engineering guidelines, and a read-only team board in the Web UI.",
   "type": "module",
   "main": "lib/index.js",

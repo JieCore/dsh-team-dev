@@ -135,6 +135,12 @@ const ZH = {
   'task.writeScopes': '写入范围',
   'task.warnings': '范围冲突',
   'task.none': '无',
+  'team.current': '当前会话',
+  'team.notCurrent': '当前查看的是其它会话的团队',
+  'team.backToCurrent': '回到当前会话团队',
+  'team.noCurrent': '当前会话还没有团队：用 team-dev 开团后会出现在这里。',
+  'view.session': '当前会话',
+  'view.all': '全部团队',
 }
 
 const translate = key => ZH[key] ?? key
@@ -326,4 +332,29 @@ test('渲染：请求失败错误态并提供重试', async t => {
   if (view === null) return
   assert.match(view.container.textContent, /看板数据加载失败/)
   assert.ok([...view.container.querySelectorAll('button')].some(button => button.textContent.includes('重试')))
+})
+
+test('渲染：当前会话团队标记 + 详情/收起按钮固定在卡片标题行', async t => {
+  const view = await setup(t, hostHandler({
+    teams: [TEAM_A, TEAM_B],
+    details: { [TEAM_A.teamId]: DETAIL_A, [TEAM_B.teamId]: DETAIL_B },
+  }), { sessionId: 'sess-c' })
+  if (view === null) return
+
+  // sess-c 属于 team-b：其下拉选项应带「当前会话」标记。
+  const currentOption = [...view.container.querySelectorAll('option')]
+    .find(option => option.textContent.includes('当前会话'))
+  assert.ok(currentOption, '当前会话团队的下拉选项应带当前会话标记')
+  assert.equal(currentOption.value, TEAM_B.teamId)
+
+  // 展开详情后，「收起」按钮仍应位于卡片标题行（card → cardHead → button），而不是卡片底部。
+  const detail = [...view.container.querySelectorAll('button')].find(button => button.textContent === '详情')
+  assert.ok(detail, '应渲染详情按钮')
+  detail.click()
+  await wait(80)
+  const toggle = [...view.container.querySelectorAll('button')].find(button => button.textContent === '收起')
+  assert.ok(toggle, '展开后应渲染收起按钮')
+  const card = toggle.parentElement && toggle.parentElement.parentElement
+  assert.ok(card && card.children[0] && card.children[0].contains(toggle), '收起按钮应固定在卡片标题行')
+  assert.match(view.container.textContent, /B 团队任务/)
 })

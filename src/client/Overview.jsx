@@ -74,7 +74,7 @@ function TeamCard({ team, current, t, onOpenTeam }) {
           <div style={styles.overviewName}>{teamDisplayName(team)}</div>
           <div style={styles.overviewId} title={String(team.teamId ?? '')}>{String(team.teamId ?? '')}</div>
         </div>
-        {current ? <span style={styles.overviewBadge}>{t('overview.current')}</span> : null}
+        {current ? <span style={{ ...styles.overviewBadge, ...styles.overviewBadgeCurrent }}>{t('overview.current')}</span> : null}
         <span style={stateBadgeStyle(state)}>{t(`overview.status.${state}`)}</span>
       </div>
       <div style={styles.overviewMembers}>
