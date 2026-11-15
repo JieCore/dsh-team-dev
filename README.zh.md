@@ -1,10 +1,12 @@
 # dsh-team-dev
 
-面向 DeepSeek Harness 的自包含「开发团队」插件包。一行插件行带来三项能力：
+面向 DeepSeek Harness 的自包含「开发团队」插件包：**装一行，就有一支能并行、能被预算约束、能被实时看板观察的开发团队**。三项核心能力：
 
 1. **步数预算守卫**——每个 agent 每回合的工具调用预算。软阈值（默认 20）向非 teammate 会话注入警告；硬阈值（默认 25）在**运行之前**拒绝所有受跟踪的非白名单调用，指导模型写 handoff、更新任务、向 Lead 汇报。白名单工具（`write`、`edit`、`team_task_update`、`send_message`）保持可用，让 agent 能收尾。默认 `onlyTeamMembers: true` 只约束 Agent Teams 的 teammate——Lead 永不受限。
 2. **随包技能**——装插件即装技能：从包内 `skills/` 目录提供 `team-dev`（开发团队编排）与 `team-boot`（通用任务团队）两个 skill。`team-dev` 另随包提供**内置开发准则**（`skills/team-dev/guidelines.md`，含前端列表排序规范）并支持项目级覆盖。项目级（rank 100）与用户级（rank 400）同名 skill 仍会覆盖这些随包技能（rank 600）。
 3. **团队看板（v0.2，浏览器半侧）**——Web UI 右侧栏的只读看板：按状态（待开始 / 进行中 / 已完成）分列、按角色/成员筛选，多对话时用团队下拉切换。数据来自两条只读 host 路由（`/api/dsh-team-dev/teams`、`/api/dsh-team-dev/teams/<teamId>`）；不写数据、不落缓存、不新增运行时依赖。
+
+**兼容性（0.2.5 起）**：适配 DSH 0.2.2 的 Agent Teams 新模型——Team 身份 = subagent 树根，任务走 `listTasks(caller)`，成员从 Agent 注册表推导；同时保留旧版 `tryMembership` 分支，旧宿主照常工作。
 
 零运行时依赖。浏览器半侧构建为 `lib/client.js`，由宿主的客户端模块系统按 `dsh.client` 声明加载。
 
