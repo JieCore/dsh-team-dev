@@ -20,6 +20,7 @@ import {
   teamProgress,
   teamState,
 } from '../src/client/overview.js'
+import { shortTeamId } from '../src/client/api.js'
 
 /** 构造测试用团队列表项。 */
 function team(teamId, leadName, counts, members = []) {
@@ -60,7 +61,11 @@ test('overviewSummary 汇总在线团队、任务、进行中与已完成', () =
 
 test('teamDisplayName 使用 Lead 名 + 短 teamId，不虚构标题', () => {
   assert.equal(teamDisplayName(TEAMS[0]), 'lead · team-alp')
-  assert.equal(teamDisplayName({ teamId: 'short', leadName: '' }), 'lead · short')
+  assert.equal(teamDisplayName({ teamId: 'short', leadName: '' }), 'Lead · short')
+  // Session id 前缀不能当成可读短 id：`session-` 之后才是有效部分。
+  assert.equal(shortTeamId('session-02f3014a-86d3-4b34'), '02f3014a')
+  // 旧快照把 id 当 Lead 名时，标题不能出现两个 session id。
+  assert.equal(teamDisplayName({ teamId: 'session-02f3014a-86d3-4b34', leadName: 'session-02f3014a-86d3-4b34' }), 'Lead · 02f3014a')
 })
 
 test('memberInitial 处理英文、中文与空名', () => {

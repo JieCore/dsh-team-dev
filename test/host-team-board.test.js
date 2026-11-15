@@ -85,8 +85,8 @@ function makeConnection() {
   }
 }
 
-function makeContext({ connection, agentTeams, agents, getThrows = false } = {}) {
-  const services = { connection, agentTeams, agents }
+function makeContext({ connection, agentTeams, agents, subagents, getThrows = false } = {}) {
+  const services = { connection, agentTeams, agents, subagents }
   const ctx = {
     injected: [],
     effectCallbacks: [],
@@ -389,4 +389,91 @@ test('卸载：effect 清理函数注销列表与惰性详情路由', async () =
   assert.equal(typeof cleanup, 'function')
   cleanup()
   assert.deepEqual([...connection.routes.keys()], [])
+})
+
+// ---------- DSH ≥ 0.2.2：Team 身份 = subagent 树根（无 tryMembership/listMembers） ----------
+const treeLead = { id: 'sess-lead', name: 'lead', status: 'running' }
+const treeMate = { id: 'sess-mate', name: 'impl', status: 'active' }
+
+function makeTreeService(overrides = {}) {
+  const calls = { tasks: [] }
+  return {
+    calls,
+    isEnabled: () => true,
+    listTasks(caller) {
+      calls.tasks.push(caller)
+      if (overrides.listTasks) return overrides.listTasks(caller, calls)
+      return [
+        { id: 't1', subject: '实现', status: 'in_progress', revision: 1 },
+        { id: 't2', subject: '取消', status: 'deleted', revision: 2 },
+      ]
+    },
+  }
+}
+
+const treeRootOf = agent => (agent.id === treeMate.id ? treeLead : agent)
+
+test('buildTeamsSnapshot：0.2.2 树形 Team 从 Agent 注册表推导成员、角色与任务计数', () => {
+  const service = makeTreeService()
+  const snapshot = buildTeamsSnapshot(service, [treeLead, treeMate], treeRootOf)
+
+  assert.equal(snapshot.length, 1)
+  const team = snapshot[0]
+  assert.equal(team.teamId, 'sess-lead')
+  assert.equal(team.leadName, 'lead')
+  assert.equal(team.memberCount, 2)
+  assert.deepEqual(team.members.map(member => [member.name, member.role]), [
+    ['lead', 'lead'],
+    ['impl', 'teammate'],
+  ])
+  assert.deepEqual(team.taskCounts, { pending: 0, in_progress: 1, completed: 0 })
+  // 任务接口的 caller 必须是根 Agent（不是 sessionId）。
+  assert.equal(service.calls.tasks[0], treeLead)
+})
+
+test('buildTeamDetail：0.2.2 树形 Team 详情过滤 deleted', () => {
+  const detail = buildTeamDetail(makeTreeService(), [treeLead, treeMate], 'sess-lead', treeRootOf)
+  assert.equal(detail.teamId, 'sess-lead')
+  assert.deepEqual(detail.tasks.map(task => task.id), ['t1'])
+})
+
+test('降级：0.2.2 服务 listTasks 抛错时团队仍可见、任务板为空', () => {
+  const service = makeTreeService({
+    listTasks: () => {
+      throw new Error('boom')
+    },
+  })
+  const snapshot = buildTeamsSnapshot(service, [treeLead], treeRootOf)
+  assert.equal(snapshot.length, 1)
+  assert.deepEqual(snapshot[0].taskCounts, { pending: 0, in_progress: 0, completed: 0 })
+})
+
+test('路由：0.2.2 形态（仅 listTasks + subagents.rootOf）返回 degraded:false', async () => {
+  const connection = makeConnection()
+  const ctx = makeContext({
+    connection,
+    agentTeams: makeTreeService(),
+    agents: [treeLead, treeMate],
+    subagents: { rootOf: treeRootOf },
+  })
+  teamBoardApply(ctx)
+  const route = connection.routes.get(LIST_PATH)
+
+  const response = await requestRoute(route, LIST_PATH)
+  const body = await response.json()
+  assert.equal(body.degraded, false)
+  assert.equal(body.reason, null)
+  assert.equal(body.teams.length, 1)
+  assert.equal(body.teams[0].teamId, 'sess-lead')
+  assert.equal(body.teams[0].memberCount, 2)
+  assert.equal(connection.routes.has(`${LIST_PATH}/sess-lead`), true)
+})
+
+test('0.2.2 树形 Team：根 Agent 没有名字时不再拿 Session id 顶替', () => {
+  const unnamedLead = { id: 'session-02f3', status: 'running' }
+  const service = makeTreeService()
+  const snapshot = buildTeamsSnapshot(service, [unnamedLead], agent => agent, )
+  assert.equal(snapshot.length, 1)
+  assert.equal(snapshot[0].leadName, 'lead')
+  assert.equal(snapshot[0].members[0].name, '')
 })

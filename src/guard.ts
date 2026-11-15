@@ -129,20 +129,53 @@ export function guardApply(ctx, config = {}): void {
    */
   // Absence is never cached: the service may mount after the first call
   // (team sessions activate lazily), so re-probe until one is found.
-  let cachedTeams: { tryMembership?: (agent: Agent) => { role?: string } | undefined } | undefined
-  function teams(): { tryMembership?: (agent: Agent) => { role?: string } | undefined } | undefined {
+  type TeamServiceLike = {
+    tryMembership?: (agent: Agent) => { role?: string } | undefined
+    isEnabled?: (agent: Agent) => boolean
+  }
+  let cachedTeams: TeamServiceLike | undefined
+  function teams(): TeamServiceLike | undefined {
     if (cachedTeams === undefined) {
       cachedTeams = ctx.get('agentTeams') as typeof cachedTeams
     }
     return cachedTeams
   }
 
+  /** The root Agent of this agent's subagent tree (DSH ≥ 0.2.2 Team identity). */
+  function rootOfAgent(agent: Agent): Agent {
+    let subagents: { rootOf?: (agent: Agent) => Agent | undefined } | undefined
+    try {
+      subagents = ctx.get('subagents') as typeof subagents
+    } catch {
+      return agent
+    }
+    if (subagents === undefined || subagents === null || typeof subagents.rootOf !== 'function') return agent
+    try {
+      return subagents.rootOf(agent) ?? agent
+    } catch {
+      return agent
+    }
+  }
+
   /** The agent's Team role, or undefined for a non-member. */
   function memberRole(agent: Agent): 'lead' | 'teammate' | undefined {
     const service = teams()
-    if (service === undefined || typeof service.tryMembership !== 'function') return undefined
-    const role = service.tryMembership(agent)?.role
-    return role === 'lead' || role === 'teammate' ? role : undefined
+    if (service === undefined) return undefined
+    if (typeof service.tryMembership === 'function') {
+      const role = service.tryMembership(agent)?.role
+      return role === 'lead' || role === 'teammate' ? role : undefined
+    }
+    // DSH ≥ 0.2.2 removed tryMembership: a tree is a Team when its root enabled
+    // Team mode, the root is the Lead, and every descendant is a teammate.
+    if (typeof service.isEnabled !== 'function') return undefined
+    let enabled = false
+    try {
+      enabled = service.isEnabled(agent) === true
+    } catch {
+      return undefined
+    }
+    if (!enabled) return undefined
+    return rootOfAgent(agent) === agent ? 'lead' : 'teammate'
   }
 
   /** Whether an agent participates in the budget at all. */

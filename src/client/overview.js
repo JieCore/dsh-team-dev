@@ -73,8 +73,12 @@ export function overviewSummary(teams) {
  * @returns 标题字符串。
  */
 export function teamDisplayName(team) {
-  const lead = team && typeof team.leadName === 'string' && team.leadName.length > 0 ? team.leadName : 'lead'
-  return `${lead} · ${shortTeamId(team && team.teamId)}`
+  const teamId = team && typeof team.teamId === 'string' ? team.teamId : ''
+  const rawLead = team && typeof team.leadName === 'string' ? team.leadName.trim() : ''
+  // 旧快照把 Session id 当 Lead 名，避免标题出现「session-… · session-」这种重复 id。
+  const lead = rawLead === '' || rawLead === teamId ? 'Lead' : rawLead
+  const short = shortTeamId(teamId)
+  return short === '' ? lead : `${lead} · ${short}`
 }
 
 /**

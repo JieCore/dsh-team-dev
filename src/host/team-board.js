@@ -120,7 +120,10 @@ function probeTeamService(ctx) {
   try {
     const service = safeGet(ctx, 'agentTeams')
     if (service === undefined || service === null) return { reason: 'agent-teams-unavailable' }
-    if (typeof service.tryMembership !== 'function') return { reason: 'agent-teams-unavailable' }
+    // DSH 0.2.2 起 TeamService 移除了 tryMembership/listMembers：Team 身份 = subagent 树根，
+    // 成员来自 Agent 注册表，任务仍由 listTasks(caller) 读取。两种形态都接受。
+    const canRead = typeof service.tryMembership === 'function' || typeof service.listTasks === 'function'
+    if (!canRead) return { reason: 'agent-teams-unavailable' }
     return { service }
   } catch {
     return { reason: 'probe-failed' }
@@ -191,12 +194,24 @@ function cloneTask(task) {
  * @returns {Array<{teamId:string,rootAgent:any,membership:any,discovered:number,members:any[],tasks:any[]}>}
  *   按 teamId 稳定排序的团队内部结构；members/tasks 取数失败时为空数组。
  */
-function collectTeams(agentTeams, agents) {
+function collectTeams(agentTeams, agents, rootOf) {
+  if (agentTeams === null || agentTeams === undefined) return []
+  if (typeof agentTeams.tryMembership === 'function') return collectLegacyTeams(agentTeams, agents)
+  if (typeof agentTeams.listTasks === 'function') return collectTreeTeams(agentTeams, agents, rootOf)
+  return []
+}
+
+/**
+ * 枚举团队（DSH ≤ 0.2.1 形态）：对每个在线 Agent 做 `tryMembership`，
+ * 按 `membership.id`（= root SessionId）分组，再从每组 root 取 roster 与任务板。
+ * @param {any} agentTeams - 带 tryMembership/listMembers/listTasks 的 TeamService。
+ * @param {any} agents - AgentRegistry 或 Agent 数组。
+ * @returns {Array<object>} 团队内部结构。
+ */
+function collectLegacyTeams(agentTeams, agents) {
   const groups = new Map()
-  const canProbe = agentTeams !== null && agentTeams !== undefined && typeof agentTeams.tryMembership === 'function'
 
   for (const agent of agentList(agents)) {
-    if (!canProbe) break
     let membership
     try {
       membership = agentTeams.tryMembership(agent)
@@ -223,7 +238,7 @@ function collectTeams(agentTeams, agents) {
     }
   }
 
-  const list = [...groups.values()].sort((a, b) => (a.teamId < b.teamId ? -1 : a.teamId > b.teamId ? 1 : 0))
+  const list = sortTeams(groups)
   for (const group of list) {
     // 参数是 Agent（不是 sessionId）；服务调用失败时降级为空板，团队仍可见。
     group.members = safeCall(() => agentTeams.listMembers(group.rootAgent), [])
@@ -235,13 +250,92 @@ function collectTeams(agentTeams, agents) {
 }
 
 /**
+ * 枚举团队（DSH ≥ 0.2.2 形态）：Team 身份 = subagent 树根，成员来自 Agent 注册表，
+ * 任务由 `listTasks(caller)` 读取。`rootOf` 由宿主 `subagents.rootOf` 提供。
+ * @param {any} agentTeams - 只实现 listTasks 的 TeamService。
+ * @param {any} agents - AgentRegistry 或 Agent 数组。
+ * @param {(agent:any)=>any} [rootOf] - 解析 Agent 所属树的根；缺省按 `agent.root ?? agent`。
+ * @returns {Array<object>} 团队内部结构。
+ */
+function collectTreeTeams(agentTeams, agents, rootOf) {
+  const resolveRoot = typeof rootOf === 'function' ? rootOf : agent => (agent !== null && agent !== undefined ? agent.root ?? agent : agent)
+  const groups = new Map()
+
+  for (const agent of agentList(agents)) {
+    const root = safeCall(() => resolveRoot(agent), agent) ?? agent
+    const teamId = agentSessionId(root)
+    if (teamId === undefined) continue
+    let group = groups.get(teamId)
+    if (group === undefined) {
+      group = { teamId, rootAgent: root, membership: null, discovered: 0, members: [], tasks: [] }
+      groups.set(teamId, group)
+    }
+    group.discovered += 1
+    const id = agentSessionId(agent) ?? ''
+    if (id !== '' && group.members.some(member => member.id === id)) continue
+    group.members.push({
+      id,
+      name: agentName(agent),
+      role: root === agent ? 'lead' : 'teammate',
+      status: agentStatus(agent),
+    })
+  }
+
+  const list = sortTeams(groups)
+  for (const group of list) {
+    group.tasks = safeCall(() => agentTeams.listTasks(group.rootAgent), [])
+    if (!Array.isArray(group.tasks)) group.tasks = []
+  }
+  return list
+}
+
+/**
+ * 按 teamId 稳定排序。
+ * @param {Map<string,object>} groups - teamId → 团队内部结构。
+ * @returns {Array<object>} 排序后的团队数组。
+ */
+function sortTeams(groups) {
+  return [...groups.values()].sort((a, b) => (a.teamId < b.teamId ? -1 : a.teamId > b.teamId ? 1 : 0))
+}
+
+/**
+ * 读取 Agent 名称：只认显式 `name`/`label`，**不拿 Session id 顶替**——
+ * 否则看板标题会渲染成 “session-xxx · session-” 这种重复的 id。
+ * @param {any} agent - Agent 实例。
+ * @returns {string} 展示名；没有名字时为空串。
+ */
+function agentName(agent) {
+  try {
+    const name = agent?.name ?? agent?.label
+    return name === undefined || name === null ? '' : String(name)
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 读取 Agent 状态：注册表未提供时按活跃处理。
+ * @param {any} agent - Agent 实例。
+ * @returns {string} 状态字符串。
+ */
+function agentStatus(agent) {
+  try {
+    const status = agent?.status ?? agent?.session?.status
+    return typeof status === 'string' && status !== '' ? status : 'active'
+  } catch {
+    return 'active'
+  }
+}
+
+/**
  * 团队展示名：优先 roster 中 role=lead 的行，其次 membership.name，最后兜底 'lead'。
  * @param {any} group - collectTeams 的内部结构。
  * @returns {string} Lead 名称。
  */
 function leadNameOf(group) {
   const lead = group.members.find?.(member => member?.role === 'lead')
-  return lead?.name ?? group.membership?.name ?? group.rootAgent?.name ?? 'lead'
+  // 用 `||` 跳过空名字：未命名的根 Agent 不应把空串当展示名。
+  return lead?.name || group.membership?.name || group.rootAgent?.name || 'lead'
 }
 
 /**
@@ -250,8 +344,8 @@ function leadNameOf(group) {
  * @param {any} agents - AgentRegistry 或 Agent 数组。
  * @returns {Array<object>} 团队摘要列表：teamId/leadName/leadSessionId/memberCount/taskCounts/members。
  */
-export function buildTeamsSnapshot(agentTeams, agents) {
-  return collectTeams(agentTeams, agents).map(group => {
+export function buildTeamsSnapshot(agentTeams, agents, rootOf) {
+  return collectTeams(agentTeams, agents, rootOf).map(group => {
     const members = group.members.filter(Boolean).map(slimMember)
     return {
       teamId: group.teamId,
@@ -272,9 +366,9 @@ export function buildTeamsSnapshot(agentTeams, agents) {
  * @param {string} teamId - 目标团队 id（TeamId = root SessionId）。
  * @returns {object|null} 团队详情；该 teamId 不属于任何在线团队时返回 null（路由层映射为 404）。
  */
-export function buildTeamDetail(agentTeams, agents, teamId) {
+export function buildTeamDetail(agentTeams, agents, teamId, rootOf) {
   const wanted = teamId === undefined || teamId === null ? '' : String(teamId)
-  const group = collectTeams(agentTeams, agents).find(candidate => candidate.teamId === wanted)
+  const group = collectTeams(agentTeams, agents, rootOf).find(candidate => candidate.teamId === wanted)
   if (group === undefined) return null
   const members = group.members.filter(Boolean).map(cloneMember)
   const tasks = group.tasks.filter(task => task?.status !== 'deleted').map(cloneTask)
@@ -319,6 +413,20 @@ export function registerRoutes(connectionCtx) {
   const detailDisposers = new Map()
 
   /**
+   * 解析 Agent 所属 subagent 树的根（DSH ≥ 0.2.2 的 Team 身份来源）。
+   * `subagents` 可能晚于本插件挂载，因此每次请求时惰性读取；缺失时退化为 Agent 自身。
+   * @param {any} agent - Agent 实例。
+   * @returns {any} 根 Agent。
+   */
+  const resolveRoot = agent => {
+    const subagents = safeGet(connectionCtx, 'subagents')
+    if (subagents !== null && subagents !== undefined && typeof subagents.rootOf === 'function') {
+      return safeCall(() => subagents.rootOf(agent), agent) ?? agent
+    }
+    return agent
+  }
+
+  /**
    * 单团队详情响应（供精确路径路由与 `?teamId=` 兜底共用）。
    * @param {string} rawTeamId - 原始 teamId。
    * @returns {Promise<Response>} 200 详情 / 400 格式错误 / 404 团队不存在 / 200 降级。
@@ -333,7 +441,7 @@ export function registerRoutes(connectionCtx) {
         // 服务不可用不是「团队不存在」：返回 200 + degraded，客户端展示空态。
         return json({ plugin: PLUGIN_NAME, degraded: true, reason: probe.reason, team: null })
       }
-      const team = buildTeamDetail(probe.service, safeGet(connectionCtx, 'agents'), rawTeamId)
+      const team = buildTeamDetail(probe.service, safeGet(connectionCtx, 'agents'), rawTeamId, resolveRoot)
       if (team === null) return json({ error: 'team-not-found' }, 404)
       return json({ plugin: PLUGIN_NAME, degraded: false, team })
     } catch {
@@ -395,7 +503,7 @@ export function registerRoutes(connectionCtx) {
       if (probe.service === undefined) {
         return json({ plugin: PLUGIN_NAME, degraded: true, reason: probe.reason, teams: [] })
       }
-      const teams = buildTeamsSnapshot(probe.service, safeGet(connectionCtx, 'agents'))
+      const teams = buildTeamsSnapshot(probe.service, safeGet(connectionCtx, 'agents'), resolveRoot)
       syncDetailRoutes(teams.map(team => team.teamId))
       return json({ plugin: PLUGIN_NAME, degraded: false, reason: null, teams })
     } catch {

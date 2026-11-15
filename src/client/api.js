@@ -133,7 +133,9 @@ export function pickTeamId(teams, sessionId, lastSelectedId, manual = false) {
  */
 export function shortTeamId(teamId) {
   const text = typeof teamId === 'string' ? teamId : ''
-  return text.length > 8 ? text.slice(0, 8) : text
+  // DSH 的 Session id 以 `session-` 开头；直接截前 8 位会得到无意义的「session-」。
+  const bare = text.startsWith('session-') ? text.slice('session-'.length) : text
+  return bare.length > 8 ? bare.slice(0, 8) : bare
 }
 
 /**
