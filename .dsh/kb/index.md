@@ -1,6 +1,6 @@
 # 索引
 
-> 每次收尾同步 ｜ 最后更新：2026-11-12 ｜ 决策 1 ｜ 坑 4
+> 每次收尾同步 ｜ 最后更新：2026-11-16 ｜ 决策 1 ｜ 坑 5
 
 ## 决策
 
@@ -8,7 +8,7 @@
 
 ## 踩坑
 
-见 [pitfalls.md](pitfalls.md)（4 条：worktree 隔离、预设副本、客户端 bundle、AGENTS.md 预算）
+见 [pitfalls.md](pitfalls.md)（5 条：worktree 隔离、预设副本、客户端 bundle、AGENTS.md 预算、成员筛选 ownerId）
 
 ## 源材料
 

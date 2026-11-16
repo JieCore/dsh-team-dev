@@ -358,3 +358,77 @@ test('渲染：当前会话团队标记 + 详情/收起按钮固定在卡片标�
   assert.ok(card && card.children[0] && card.children[0].contains(toggle), '收起按钮应固定在卡片标题行')
   assert.match(view.container.textContent, /B 团队任务/)
 })
+
+// ---------- 成员筛选：按 ownerId 归属，未命名成员也能切换 ----------
+const TEAM_C = {
+  teamId: 'team-c-lead-session',
+  leadName: 'lead',
+  leadSessionId: 'sess-l',
+  memberCount: 1,
+  taskCounts: { pending: 2, in_progress: 0, completed: 0 },
+  // 未命名 Lead：DSH 0.2.2 的 roster 允许 name 为空（看板显示「未命名成员 · Lead」）。
+  members: [{ id: 'sess-l', name: '', role: 'lead', status: 'running' }],
+}
+const DETAIL_C = {
+  teamId: TEAM_C.teamId,
+  leadName: 'lead',
+  members: TEAM_C.members,
+  taskCounts: TEAM_C.taskCounts,
+  tasks: [
+    // 未命名成员认领的任务：只有 ownerId，没有 ownerName。
+    { id: 'c1', subject: '未命名 Lead 的任务', status: 'pending', ownerId: 'sess-l', ready: true, revision: 1 },
+    { id: 'c2', subject: '无主任务', status: 'pending', ready: true, revision: 1 },
+  ],
+}
+
+test('渲染：未命名成员的 chip 可点击切换，并按 ownerId 精确筛选', async t => {
+  const view = await setup(t, hostHandler({
+    teams: [TEAM_C],
+    details: { [TEAM_C.teamId]: DETAIL_C },
+  }), { sessionId: 'sess-l' })
+  if (view === null) return
+  const text = () => view.container.textContent
+
+  const chip = [...view.container.querySelectorAll('button')]
+    .find(button => button.textContent === '未命名成员 · Lead')
+  assert.ok(chip, '未命名成员应渲染成员 chip')
+  assert.match(text(), /未命名 Lead 的任务/)
+  assert.match(text(), /无主任务/)
+  // 负责人按 ownerId 反查成员表：未命名成员认领的任务显示「未命名成员」，
+  // 只有真正无主的 c2 才显示「未分配」。
+  assert.equal((text().match(/未分配/g) || []).length, 1, '只有无主任务显示「未分配」')
+
+  chip.click()
+  await wait(80)
+  assert.match(text(), /未命名 Lead 的任务/, '筛选后仍应显示该成员的任务')
+  assert.doesNotMatch(text(), /无主任务/, '无主任务不应混入未命名成员的筛选结果')
+  assert.doesNotMatch(text(), /未分配/)
+
+  // 再点一次回到「全部成员」。
+  const activeChip = [...view.container.querySelectorAll('button')]
+    .find(button => button.textContent === '未命名成员 · Lead')
+  activeChip.click()
+  await wait(80)
+  assert.match(text(), /无主任务/)
+  assert.match(text(), /未分配/, '无主任务应显示「未分配」')
+})
+
+test('渲染：具名成员 chip 按 ownerName 筛选并可再次取消', async t => {
+  const view = await setup(t, hostHandler({
+    teams: [TEAM_A, TEAM_B],
+    details: { [TEAM_A.teamId]: DETAIL_A, [TEAM_B.teamId]: DETAIL_B },
+  }), { sessionId: 'sess-b' })
+  if (view === null) return
+  const text = () => view.container.textContent
+
+  const bob = [...view.container.querySelectorAll('button')].find(button => button.textContent === 'bob')
+  assert.ok(bob, '应渲染 bob 的成员 chip')
+  bob.click()
+  await wait(80)
+  assert.match(text(), /实现登录接口/)
+  assert.doesNotMatch(text(), /接口评审/)
+  // 已完成列在筛选后计数应随筛选结果更新。
+  const completedHead = [...view.container.querySelectorAll('button')]
+    .find(button => button.textContent.includes('已完成'))
+  assert.equal(completedHead.textContent.replace(/[^\d]/g, ''), '0')
+})

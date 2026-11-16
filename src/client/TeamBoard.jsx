@@ -97,6 +97,83 @@ function memberMeta(member, t) {
 }
 
 /**
+ * 成员展示名：代理没有名字时统一显示「未命名成员」，避免出现空白 chip。
+ * @param member - TeamMemberView。
+ * @param t - 翻译函数。
+ * @returns 非空展示名。
+ */
+function memberLabel(member, t) {
+  return (member && member.name) || t('member.unknown')
+}
+
+/**
+ * 成员筛选键：优先用 session id（= host 侧 TeamTaskView.ownerId），
+ * 没有 id 的退化成员才退回名字键。只做组件内比较，不参与接口。
+ * @param member - TeamMemberView。
+ * @returns 稳定的筛选键。
+ */
+function memberKey(member) {
+  const id = member && typeof member.id === 'string' ? member.id : ''
+  return id !== '' ? `id:${id}` : `name:${(member && member.name) || ''}`
+}
+
+/**
+ * 归一化任务负责人名：host 对无主任务不下发 ownerName。
+ * @param task - TeamTaskView。
+ * @returns 负责人名；无主任务为空串。
+ */
+function taskOwnerName(task) {
+  return task && typeof task.ownerName === 'string' ? task.ownerName : ''
+}
+
+/**
+ * 任务是否属于某个成员。
+ *
+ * 优先用 `ownerId`：DSH 0.2.2 起的 TeamTaskView 带 ownerId，未命名成员认领的任务
+ * 只有 ownerId、没有 ownerName（旧形态只给 ownerName）。任务没有 ownerId 时：
+ * 宿主整体下发 ownerId 的形态下它就是「无主任务」，任何成员都不匹配；
+ * 完全不下发 ownerId 的旧形态才退回名字匹配 —— host 把 lead 的任务固定记为
+ * `ownerName: 'lead'`，所以 lead 行同时接受 'lead' 和本名，未命名成员对应没有 ownerName。
+ * @param task - TeamTaskView。
+ * @param member - TeamMemberView。
+ * @param hasOwnerId - 该团队的任务行是否带 ownerId（宿主形态判定）。
+ * @returns 是否属于该成员。
+ */
+function taskOwnedBy(task, member, hasOwnerId = false) {
+  if (!task || !member) return false
+  const ownerId = typeof task.ownerId === 'string' ? task.ownerId : ''
+  if (ownerId !== '') return ownerId === member.id
+  if (hasOwnerId) return false
+  const owner = taskOwnerName(task)
+  if (member.role === 'lead') {
+    if (owner === 'lead') return true
+    return member.name ? owner === member.name : owner === ''
+  }
+  if (!member.name) return owner === ''
+  return owner === member.name
+}
+
+/**
+ * 任务卡的负责人文案：先按 ownerId 从成员表反查展示名（未命名成员显示「未命名成员」，
+ * 不再误报「未分配」），成员已不在花名册时退回 ownerName，最后才落到「未分配」。
+ * @param task - TeamTaskView。
+ * @param members - 当前团队成员列表。
+ * @param t - 翻译函数。
+ * @returns 负责人展示文案。
+ */
+function taskOwnerLabel(task, members, t) {
+  const ownerId = task && typeof task.ownerId === 'string' ? task.ownerId : ''
+  if (ownerId !== '') {
+    const owner = Array.isArray(members) ? members.find(member => member && member.id === ownerId) : null
+    if (owner) return memberLabel(owner, t)
+    const stored = taskOwnerName(task)
+    return stored === '' ? t('member.unknown') : stored
+  }
+  const owner = taskOwnerName(task)
+  return owner === '' ? t('task.unassigned') : owner
+}
+
+/**
  * 把 writeScopeWarnings 归一化为可展示文本（类型未定，字符串优先）。
  * @param warnings - TeamTaskView.writeScopeWarnings。
  * @returns 以中文分号连接的文本。
@@ -107,14 +184,14 @@ function warningText(warnings) {
 
 /**
  * 单张任务卡：标题、负责人、阻塞/就绪、revision，详情折叠写入范围与 warnings。
- * @param props - `{ task, t, expanded, onToggle }`。
+ * @param props - `{ task, members, t, expanded, onToggle }`。
  * @returns 任务卡元素。
  */
-function TaskCard({ task, t, expanded, onToggle }) {
+function TaskCard({ task, members, t, expanded, onToggle }) {
   const blockedBy = Array.isArray(task.blockedBy) ? task.blockedBy.filter(Boolean) : []
   const writeScopes = Array.isArray(task.writeScopes) ? task.writeScopes : []
   const warnings = Array.isArray(task.writeScopeWarnings) ? task.writeScopeWarnings : []
-  const owner = task.ownerName || t('task.unassigned')
+  const owner = taskOwnerLabel(task, members, t)
   return (
     <div style={styles.card}>
       <div style={styles.cardHead}>
@@ -337,15 +414,6 @@ export function TeamBoard(props) {
 
   const groups = useMemo(() => groupTasks(activeTeam ? activeTeam.tasks : []), [activeTeam])
 
-  const filteredGroups = useMemo(() => {
-    if (memberFilter === null) return groups
-    const result = {}
-    for (const columnStatus of Object.keys(groups)) {
-      result[columnStatus] = groups[columnStatus].filter(task => task.ownerName === memberFilter)
-    }
-    return result
-  }, [groups, memberFilter])
-
   const members = useMemo(() => {
     const list = activeTeam && Array.isArray(activeTeam.members) ? activeTeam.members.slice() : []
     // 只读成员列表的确定性排序（guidelines §5.1）：lead 置顶 → 名称 → id。
@@ -357,6 +425,34 @@ export function TeamBoard(props) {
     })
     return list
   }, [activeTeam])
+
+  // 筛选键 → 成员对象；成员被移出花名册后自动回落到「全部成员」（下方 effect 复位状态）。
+  const selectedMember = useMemo(() => {
+    if (memberFilter === null) return null
+    return members.find(member => member && memberKey(member) === memberFilter) || null
+  }, [members, memberFilter])
+
+  // 宿主形态判定：任务行带 ownerId 时「没有 ownerId」就是无主任务，不能再按名字兜底匹配，
+  // 否则未命名成员会把「未分配」的任务算进来。
+  const tasksHaveOwnerId = useMemo(() => {
+    const list = activeTeam && Array.isArray(activeTeam.tasks) ? activeTeam.tasks : []
+    return list.some(task => task && typeof task.ownerId === 'string' && task.ownerId !== '')
+  }, [activeTeam])
+
+  const filteredGroups = useMemo(() => {
+    if (selectedMember === null) return groups
+    const result = {}
+    for (const columnStatus of Object.keys(groups)) {
+      result[columnStatus] = groups[columnStatus].filter(task => taskOwnedBy(task, selectedMember, tasksHaveOwnerId))
+    }
+    return result
+  }, [groups, selectedMember, tasksHaveOwnerId])
+
+  // 成员在花名册里消失（团队重开、成员退出）时清掉筛选，避免看板空着却没有高亮 chip。
+  useEffect(() => {
+    if (memberFilter === null || selectedMember !== null) return
+    setMemberFilter(null)
+  }, [memberFilter, selectedMember])
 
   // 当前会话所属团队：teamId/leadSessionId 命中，或当前会话是某团队成员。
   const currentTeamId = useMemo(() => {
@@ -441,20 +537,20 @@ export function TeamBoard(props) {
             {t('filter.all')}
           </button>
           {members.map(member => {
-            const label = member.name || t('member.unknown')
-            const active = memberFilter !== null && memberFilter === member.name
+            const key = memberKey(member)
+            const active = memberFilter !== null && memberFilter === key
             return (
               <button
-                key={String(member.id)}
+                key={key}
                 type="button"
                 title={memberMeta(member, t)}
                 style={active ? { ...styles.filterChip, ...styles.filterChipActive } : styles.filterChip}
                 onClick={() => {
-                  if (!member.name) return
-                  setMemberFilter(prev => (prev === member.name ? null : member.name))
+                  // 未命名成员同样可以筛选：归属靠 ownerId 判定，不依赖名字。
+                  setMemberFilter(prev => (prev === key ? null : key))
                 }}
               >
-                {member.role === 'lead' ? `${label} · ${t('member.lead')}` : label}
+                {member.role === 'lead' ? `${memberLabel(member, t)} · ${t('member.lead')}` : memberLabel(member, t)}
               </button>
             )
           })}
@@ -491,6 +587,7 @@ export function TeamBoard(props) {
                     <TaskCard
                       key={String(task.id)}
                       task={task}
+                      members={members}
                       t={t}
                       expanded={expandedTaskId === task.id}
                       onToggle={() => setExpandedTaskId(prev => (prev === task.id ? null : task.id))}
