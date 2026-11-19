@@ -1,5 +1,7 @@
 # Team Dev 角色目录、编队与派活模板
 
+> 先读 `contract.md` 的 L0；本文件是编排细节（L2）。项目规则由 `project-profile.md` 发现，任务卡只写路径与适用条款。
+
 ## 1. 角色目录
 
 | 角色 | 何时使用 | context | 可写文件 |
@@ -29,7 +31,7 @@
 ## 3. 角色边界
 
 **所有角色通用**：上游产物是输入不是事实；引用关键结论前抽样回溯原始来源（≥3 条）；发现冲突以 L1（源码/命令输出）为准，报告 Lead，不得静默绕过。
-**准则优先**：开工前读任务卡「输入材料」里的内置 `guidelines.md` 与项目级准则（`AGENTS.md` / `CLAUDE.md` / `.dsh/team-guidelines.md`）；按「适用准则条款」自检，冲突报告 Lead。项目级条款覆盖内置，但不得放宽数据安全与质量门底线。
+**准则优先**：开工前读任务卡「输入材料」里的 `engineering.md` 与项目规则（`AGENTS.md` / `CLAUDE.md` / `.dsh/team-guidelines.md` 及其指针）；按「适用准则条款」自检，冲突报告 Lead。项目规则可覆盖 L1，但**不能覆盖 L0**（安全/质量门/交付面/最终声明）。
 
 ### scout（可选，fork）
 - **职责**：按 `onboarding.md` 协议快速摸清项目，产出 `00-onboarding.md`。
@@ -92,16 +94,17 @@
 
 入口 / 路由文件、共享类型与接口定义、`package.json` 与锁文件、构建 / CI 配置、迁移脚本、`AGENTS.md` / `README` 等约定文件。**多会话并行时共享文件同时只允许一个会话写。**
 
-## 5. 任务卡模板（9 项，缺一项不下发）
+## 5. 任务卡模板（10 项，缺一项不下发）
 
 ```text
 任务 id：<Lead 记录并告知成员>
 目标与交付物：<做什么 + 具体文件路径>
-输入材料：<team-out/00-onboarding.md + design.md + skills/team-dev/guidelines.md + 项目级准则文件路径 + 前序产物；无项目级准则写「项目级准则：无」>
-适用准则条款：<guidelines.md §x + 项目级覆盖条款，例：§5.2 前端列表排序规范>
+输入材料：<team-out/00-onboarding.md + design.md + skills/team-dev/references/engineering.md + 项目规则文件路径 + 前序产物；无项目规则写「项目规则：无」>
+适用准则条款：<engineering.md §x + 项目规则追加/覆盖条款，例：§5.2 前端列表排序规范>
 写作用域：<文件级清单>
 禁止触碰：<共享文件 + 其他成员负责的文件>
 验收命令与 DoD：<可执行命令 + 期望结果>
+交付面：<本次是否产生用户要打开的 artifact；路径；若无可写「无独立交付文件」；present 由 Lead 收尾调用>
 依赖：<blocked_by 列表，没有写无>
 汇报格式：≤5 行：改动文件、命令结果、未解决项、需要 Lead 决策的点
 ```
@@ -110,7 +113,7 @@
 
 ```text
 任务 <task-id> 已就绪。请重新 team_task_get 确认 revision 与完整描述，claim 后开始。
-输入：team-out/00-onboarding.md、team-out/design.md 与任务卡「输入材料」列出的准则；验收：<命令>。
+输入：team-out/00-onboarding.md、team-out/design.md 与任务卡「输入材料」列出的准则；验收：<命令>；交付面：<artifact 路径 / 无>。
 边界不变：只改写作用域内文件；遇到阻塞立刻回报，不要自行扩大范围。
 ```
 
@@ -158,7 +161,8 @@ ready=false：不要 claim，回报「待命」并结束本轮。ready=true：cl
 ready=false：不要 claim（会被 TEAM_TASK_BLOCKED 拒绝），回报「待命」并结束本轮。
 ready=true：claim → 读准则 → 实现 → 自检 → complete → 回报。
 输入：team-out/00-onboarding.md、team-out/design.md（若存在）、任务描述。
-准则：先读任务卡「输入材料」中的 skills/team-dev/guidelines.md 与项目级准则，按「适用准则条款」自检；任务卡与准则冲突先报告 Lead。
+准则：先读任务卡「输入材料」中的 skills/team-dev/references/engineering.md 与项目规则，按「适用准则条款」自检；任务卡与准则冲突先报告 Lead。
+交付面：按任务卡「交付面」整理产物路径；你不调用 present，Lead 收尾负责；若任务卡写「无独立交付文件」，不要额外造报告凑数。
 上游产物可能过期或有误：引用关键结论前回溯源码核实；发现冲突以源码为准并报告 Lead，不要静默改对。
 边界：只改写作用域内文件；共享文件与其他成员文件一律不碰；需要扩范围先回报。
 禁止：git 写操作、跑全量 build/test、格式化、创建成员、给其他成员发消息、改任务结构。
@@ -173,7 +177,7 @@ ready=true：claim → 读准则 → 实现 → 自检 → complete → 回报�
 ```text
 你是 Agent Team 的 teammate（不是 Lead）。工作目录：<workspace>。任务 id：<task-id>。先 team_task_get；消息只是唤醒。
 ready=false：不要 claim，回报「待命」并结束本轮。ready=true：claim → 评审 → complete → 回报。
-职责：自己跑 git diff 看最新改动，按 delivery.md 的 reviewer checklist 评审。
+职责：自己跑 git diff 看最新改动，按 quality.md 的 reviewer checklist 评审；检查任务卡「交付面」是否成立（有 artifact 未标注 / 无 artifact 却声称有，记 [blocking]）。
 分级：正确性/数据安全/接口契约/回归风险 → [blocking]；风格与偏好 → [nit]。每条附 文件:行号 + 可执行改法。
 只读代码；唯一可写文件是 <workspace>/team-out/review.md；不改代码、不跑构建、不要求补测试。
 抽查交付文档对上游结论的引用是否成立（≥3 条）；不成立的记为 [blocking] 并指出原始依据。

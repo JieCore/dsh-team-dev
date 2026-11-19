@@ -27,8 +27,8 @@ const OUTPUT = join(root, 'lib', 'client.js')
 const MAX_BUNDLE_BYTES = 1.5 * 1024 * 1024
 /** V5：允许保持 external 的宿主模块基线。 */
 const ALLOWED_EXTERNALS = new Set(['react', 'react-dom'])
-/** V3：客户端入口必须出现的注册标记。 */
-const REQUIRED_MARKERS = ['sidebar.right.pane.tab', 'slots.register']
+/** V3：客户端入口必须出现的注册标记（看板 tab + turn tail 会话改动卡）。 */
+const REQUIRED_MARKERS = ['sidebar.right.pane.tab', 'conversation.chat.turnTail', 'slots.register']
 
 async function findEsbuild() {
   const candidates = []

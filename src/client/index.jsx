@@ -12,6 +12,7 @@
  * 而不会挂载；host 半侧接口不受影响（design §1.5 允许的降级）。
  */
 import * as React from 'react'
+import { SessionChanges } from './SessionChanges.jsx'
 import { TeamBoard } from './TeamBoard.jsx'
 import { styles } from './styles.js'
 
@@ -154,6 +155,25 @@ const en = {
   'overview.degraded': 'Agent Teams is not enabled in this deployment (agentTeams service unavailable).',
 }
 
+/** 会话级改动账本的 locale 命名空间与文案。 */
+const CHANGES_NS = 'dsh-session-changes'
+const changesZh = {
+  title: '本会话累计改动 {total} 个文件',
+  edits: '{edits} 次编辑',
+  more: '展开其余 {count} 个',
+  less: '收起',
+  deleted: '已删除',
+  turn: '第 {turn} 轮',
+}
+const changesEn = {
+  title: '{total} files changed in this session',
+  edits: '{edits} edits',
+  more: 'Show {count} more',
+  less: 'Show less',
+  deleted: 'deleted',
+  turn: 'turn {turn}',
+}
+
 /**
  * 看板渲染边界：单个组件异常只显示占位，不拖垮整个右侧栏。
  */
@@ -217,4 +237,11 @@ export function apply(ctx) {
     key: BOARD_ID,
     locale: NS,
   }, TeamBoardBody)), 'dsh-team-dev: board tab body')
+  // 独立插件 dsh-session-changes 的客户端半侧：同一 bundle 里多注册一个 turn tail 卡片。
+  ctx.effect(() => ctx.locale.register(CHANGES_NS, { zh: changesZh, en: changesEn }), 'dsh-session-changes: dictionaries')
+  ctx.effect(() => ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
+    name: 'conversation.chat.turnTail',
+    id: 'dsh-session-changes',
+    locale: CHANGES_NS,
+  }, SessionChanges)), 'dsh-session-changes: turn tail')
 }

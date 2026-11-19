@@ -7,6 +7,10 @@ import { guardApply } from './guard.ts'
 import { skillsApply } from './provider.js'
 import { teamBoardApply } from './host/team-board.js'
 
+// The policy is part of the plugin's contract surface: tests and the harness
+// facade consume the same defaults the guard uses at runtime.
+export { DEFAULT_ALLOW, normalizePolicy, completionList, softNotice, finalNotice, hardFeedback } from './policy.ts'
+
 export const name = 'dsh-team-dev'
 export const inject = ['agents', 'skills']
 

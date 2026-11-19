@@ -1,6 +1,7 @@
-// Hand-written master source of the budget guard (single source of truth)./Users/lyj/MyProjects/DeepseekAi/deepseek-harness/packages/guard/step-budget/src/index.ts — do not edit.
+// Hand-written master source of the budget guard (single source of truth) — do not edit.
 
 import { createUserMessage } from './provider.js'
+import { normalizePolicy, softNotice, finalNotice, hardFeedback, type PolicyConfig } from './policy.ts'
 /**
  * Per-agent, per-turn tool-call budget guard. The plugin itself mounts on the
  * host plane, then installs its observers into every agent's own context
@@ -18,35 +19,6 @@ import { createUserMessage } from './provider.js'
 
 
 
-/**
- * Plugin config, validated by the same-named schemastery schema plus the
- * load-time checks in `apply` (misconfiguration fails loud: a soft threshold
- * below 2 or a hard threshold not above it throws at plugin load).
- * `include`/`exclude`/`allow` entries are `*`-wildcard predicates over tool
- * names at call time, not references to registry entries.
- */
-export interface Config {
-  /** Tracked-call count that triggers the budget warning (default `20`). */
-  softThreshold?: number
-  /** Tracked-call count whose crossing blocks non-allowlisted calls (default `25`). */
-  hardThreshold?: number
-  /**
-   * Tool-name patterns that keep working after the hard threshold (default
-   * `['write', 'edit', 'team_task_update', 'send_message']`) — the completion
-   * path an agent needs to write a handoff and report. They still count.
-   */
-  allow?: string[]
-  /** Tool-name patterns to track; empty means every tool is tracked. */
-  include?: string[]
-  /** Tool-name patterns transparent to the budget (neither count nor block). */
-  exclude?: string[]
-  /**
-   * When `true` (default), only Agent-Team teammates are budgeted — the Lead
-   * keeps its own long turns unbounded, and the guard is transparent when the
-   * Agent Teams service is absent. When `false`, every agent is budgeted.
-   */
-  onlyTeamMembers?: boolean
-}
 
 /**
  * The `{kind:'plugin'}` source stamped on every notice this guard injects —
@@ -54,28 +26,6 @@ export interface Config {
  * prompt in derived history).
  */
 const PLUGIN_SOURCE: MessageSource = { kind: 'plugin', plugin: 'dsh-team-dev' }
-
-/** Soft-threshold warning injected while work may still continue. */
-function softNotice(used: number, hard: number): string {
-  return `Step budget warning: this turn has used ${used} tracked tool calls (hard limit ${hard}). `
-    + 'If the task cannot finish within the remaining budget, stop exploring now and prepare a handoff: '
-    + 'write a handoff file, report your progress to the Lead, and wait for the Lead to extend the budget or shrink the scope.'
-}
-
-/** Last-allowed-call warning injected exactly when the hard threshold is reached. */
-function finalNotice(used: number, hard: number): string {
-  return `Step budget limit reached: this turn has used ${used} tracked tool calls (hard limit ${hard}). `
-    + 'This is the last call allowed outside the completion allowlist. After it, finish with '
-    + 'write/edit/team_task_update/send_message: write a handoff file, update your task status, and report to the Lead.'
-}
-
-/** Feedback on a refused call — the model sees it as the tool result and must finish via the allowlist. */
-function hardFeedback(used: number, hard: number): string {
-  return `Step budget exhausted: this turn has used ${used} tracked tool calls (hard limit ${hard}). `
-    + 'Further tool calls are blocked except the completion allowlist (write, edit, team_task_update, send_message). '
-    + 'Do not retry the blocked call. Finish gracefully now: write a handoff file with what is done and what remains, '
-    + 'update your task status, and report to the Lead.'
-}
 
 /** Compile one `*`-wildcard pattern to an anchored RegExp (every other regex metacharacter is matched literally). */
 function wildcardToRegExp(pattern: string): RegExp {
@@ -99,20 +49,15 @@ function foldNotice(downstream: PostToolDecision, notice: UserMessage): PostTool
 /**
  * Install the guard's per-agent observers.
  * @param ctx - host-plane plugin context; `agents` gives the live registry.
- * @param config - validated {@link Config}; thresholds are re-checked fail-loud here.
+ * @param config - runtime policy; thresholds and the completion allowlist are
+ *   normalized once here, then shared by every agent observer.
  */
-export function guardApply(ctx, config = {}): void {
-  const softThreshold = config.softThreshold ?? 20
-  const hardThreshold = config.hardThreshold ?? 25
-  if (!Number.isInteger(softThreshold) || softThreshold < 2) {
-    throw new Error(`dsh-team-dev: invalid softThreshold ${softThreshold} — must be an integer >= 2`)
-  }
-  if (!Number.isInteger(hardThreshold) || hardThreshold <= softThreshold) {
-    throw new Error(`dsh-team-dev: invalid hardThreshold ${hardThreshold} — must be an integer > softThreshold ${softThreshold}`)
-  }
-  const allowPatterns = (config.allow ?? ['write', 'edit', 'team_task_update', 'send_message']).map(wildcardToRegExp)
-  const includePatterns = (config.include ?? []).map(wildcardToRegExp)
-  const excludePatterns = (config.exclude ?? []).map(wildcardToRegExp)
+export function guardApply(ctx, config: PolicyConfig = {}): void {
+  const policy = normalizePolicy(config)
+  const { softThreshold, hardThreshold } = policy
+  const allowPatterns = policy.allow.map(wildcardToRegExp)
+  const includePatterns = policy.include.map(wildcardToRegExp)
+  const excludePatterns = policy.exclude.map(wildcardToRegExp)
 
   /**
    * Team-membership probe for `onlyTeamMembers`. The Agent Teams package is
@@ -180,7 +125,7 @@ export function guardApply(ctx, config = {}): void {
 
   /** Whether an agent participates in the budget at all. */
   function budgeted(agent: Agent): boolean {
-    if (!(config.onlyTeamMembers ?? true)) return true
+    if (!policy.onlyTeamMembers) return true
     const role = memberRole(agent)
     // A non-member (service absent yet, or a plain agent) is not budgeted:
     // stay transparent instead of silently bounding agents the deployment
@@ -242,7 +187,7 @@ export function guardApply(ctx, config = {}): void {
       if (!budgeted(exec.agent) || !tracked(exec.name) || allowed(exec.name)) return next()
       const used = counters.get(exec.agent) ?? 0
       if (used >= hardThreshold) {
-        return Promise.resolve({ kind: 'deny', reason: hardFeedback(used, hardThreshold) })
+        return Promise.resolve({ kind: 'deny', reason: hardFeedback(used, policy) })
       }
       return next()
     })
@@ -254,13 +199,13 @@ export function guardApply(ctx, config = {}): void {
       if (!noticesAllowed(exec.agent)) return downstream
       if (count === softThreshold) {
         return foldNotice(downstream, createUserMessage({
-          content: [{ type: 'text', text: softNotice(count, hardThreshold) }],
+          content: [{ type: 'text', text: softNotice(count, policy) }],
           source: { ...PLUGIN_SOURCE, form: 'notice', summary: `step budget ${count}/${hardThreshold}` },
         }))
       }
       if (count === hardThreshold) {
         return foldNotice(downstream, createUserMessage({
-          content: [{ type: 'text', text: finalNotice(count, hardThreshold) }],
+          content: [{ type: 'text', text: finalNotice(count, policy) }],
           source: { ...PLUGIN_SOURCE, form: 'notice', summary: `step budget ${count}/${hardThreshold}` },
         }))
       }

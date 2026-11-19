@@ -1,7 +1,9 @@
-# dsh-team-dev bundle patch: one row that mounts the budget guard and the
-# bundled team-dev / team-boot skills. Applied as ONE insert over the profile
-# root when this bundle is listed. Users may override the row's config by id
-# (`dsh-team-dev`), or remove the bundle line to uninstall.
+# dsh-team-dev bundle patch: one insert with two rows — the team-dev composition
+# (budget guard + bundled skills + team board) and the separate session-changes
+# ledger. Applied over the profile root when this bundle is listed. Users may
+# override either row's config by id, or remove the bundle line to uninstall.
 - insert:
     - id: dsh-team-dev
       name: dsh-team-dev
+    - id: dsh-session-changes
+      name: dsh-team-dev/session-changes
