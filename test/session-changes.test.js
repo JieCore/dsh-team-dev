@@ -43,6 +43,17 @@ test('按最后修改轮次倒序、同轮次按路径升序', () => {
   assert.deepEqual(files.map(file => file.path), ['/w/a.js', '/w/b.js', '/w/old.js'])
 })
 
+test('最新轮次只升不降，空账本 latestTurn 为 0', () => {
+  const ledger = createLedger()
+  ledger.touchTurn('s1', 5)
+  ledger.touchTurn('s1', 3)
+  ledger.record('s1', '/w', { path: '/w/a.js', agent: 'lead', turn: 2 })
+  assert.equal(ledger.summary('s1').latestTurn, 5)
+
+  const empty = summarizeLedger({ sessionId: 's0', cwd: '/w', updatedAt: 0, files: new Map() })
+  assert.equal(empty.latestTurn, 0)
+})
+
 test('删除标记一旦出现就保留；空账本摘要稳定', () => {
   const ledger = createLedger()
   ledger.record('s1', '/w', { path: '/w/gone.js', agent: 'bob', turn: 3, deleted: true })
@@ -124,6 +135,7 @@ test('apply 记录顶层与子代理编辑，并通过只读路由返回会话�
   assert.equal(response.headers.get('cache-control'), 'no-store')
   const payload = await response.json()
   assert.equal(payload.plugin, 'dsh-session-changes')
+  assert.equal(payload.latestTurn, 1)
   assert.equal(payload.total, 2)
   assert.equal(payload.edits, 2)
   assert.deepEqual(payload.files.map(file => file.path).sort(), ['/w/a.js', '/w2/b.js'])
@@ -148,5 +160,17 @@ test('summary 路由拒绝非法 sessionId，未知会话返回空摘要', async
 
   const empty = await route.fetch(new Request('http://localhost/api/dsh-session-changes/summary?sessionId=s9'))
   assert.equal(empty.status, 200)
-  assert.deepEqual((await empty.json()).files, [])
+  const emptyPayload = await empty.json()
+  assert.deepEqual(emptyPayload.files, [])
+  assert.equal(emptyPayload.latestTurn, 0)
+})
+
+test('Lead 的 name 是 session id 时，展示名回退为 Lead 而不是抄 id', async () => {
+  const host = fakeHost()
+  host.lead.name = 'session-78fb3d29-bab2-4e57-a4f7-196acf3ca1d8'
+  applySessionChanges(host.ctx, {})
+  await host.listeners.get('fs/write-intent')({ path: '/w/a.js' }, host.lead, async () => ({ kind: 'allow' }))
+  const route = host.routes.find(candidate => candidate.path === '/api/dsh-session-changes/summary')
+  const payload = await (await route.fetch(new Request('http://localhost/api/dsh-session-changes/summary?sessionId=s1'))).json()
+  assert.deepEqual(payload.files[0].agents, ['Lead'])
 })

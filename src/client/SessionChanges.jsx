@@ -26,15 +26,33 @@ function splitPath(path) {
 }
 
 /**
- * 单行元信息：agent、轮次、编辑次数、是否删除。
- * @param {object} file - 账本文件行。
+ * agent 展示名：Lead/Member 走 locale，真实成员名原样显示。
+ * @param {string} agent - 账本 agent 标签。
  * @param {Function} t - locale 绑定。
  * @returns {string} 展示文本。
  */
-function detailOf(file, t) {
+function agentLabel(agent, t) {
+  if (agent === 'Lead') return t('lead')
+  if (agent === 'Member') return t('member')
+  return agent
+}
+
+/**
+ * 单行元信息：只在整张卡没有统一 agent/轮次时，才逐行重复这两项。
+ * @param {object} file - 账本文件行。
+ * @param {Function} t - locale 绑定。
+ * @param {string|null} commonAgent - 全卡统一 agent；null 表示混合。
+ * @param {number|null} commonTurn - 全卡统一轮次；null 表示混合。
+ * @returns {string} 展示文本。
+ */
+function detailOf(file, t, commonAgent, commonTurn) {
   const bits = []
-  if (Array.isArray(file.agents) && file.agents.length > 0) bits.push(file.agents.join(' · '))
-  if (Array.isArray(file.turns) && file.turns.length > 0) bits.push(t('turn', { turn: file.turns.join(',') }))
+  if (commonAgent === null && Array.isArray(file.agents) && file.agents.length > 0) {
+    bits.push(file.agents.map(agent => agentLabel(agent, t)).join(' · '))
+  }
+  if (commonTurn === null && Array.isArray(file.turns) && file.turns.length > 0) {
+    bits.push(t('turn', { turn: file.turns.join(',') }))
+  }
   if (Number(file.edits) > 1) bits.push(`×${file.edits}`)
   if (file.deleted === true) bits.push(t('deleted'))
   return bits.join(' · ')
@@ -46,12 +64,18 @@ function detailOf(file, t) {
  * @returns {JSX.Element|null} 卡片或 null。
  */
 export function SessionChanges(props) {
-  const { sessionId, openFile, t } = props
+  const { sessionId, openFile, t, turn, useChat } = props
+  // 与 DSH 自带 TurnTailNodeView 相同的判定：只有时间线最后一个 turn 的 tail 才渲染。
+  // useChat 是可订阅 selector，新轮次出现时旧 tail 会自动重渲染并隐藏。
+  const isLatest = useChat(snapshot => snapshot.timeline.turnOrder.at(-1) === turn?.turn)
+  // 轮次结束后才展示；流式进行中的 tail 不显示累计卡。
+  const isClosed = turn?.end !== undefined
   const [data, setData] = React.useState(null)
   const [expanded, setExpanded] = React.useState(false)
 
   React.useEffect(() => {
-    if (typeof sessionId !== 'string' || sessionId.length === 0) return undefined
+    // 旧 tail 不发起请求；新轮次出现时 isLatest 变为 false，effect 清理并中止请求。
+    if (!isLatest || !isClosed || typeof sessionId !== 'string' || sessionId.length === 0) return undefined
     const controller = new AbortController()
     let live = true
     fetch(`${PREFIX}/summary?sessionId=${encodeURIComponent(sessionId)}`, {
@@ -70,9 +94,20 @@ export function SessionChanges(props) {
       live = false
       controller.abort()
     }
-  }, [sessionId])
+  }, [sessionId, isLatest, isClosed])
 
-  if (data === null || data.files.length === 0) return null
+  if (data === null || data.files.length === 0 || !isLatest || !isClosed) return null
+
+  const allTurns = [...new Set(data.files.flatMap(file => (Array.isArray(file.turns) ? file.turns : [])))].sort((a, b) => a - b)
+  const allAgents = [...new Set(data.files.flatMap(file => (Array.isArray(file.agents) ? file.agents : [])))].sort()
+  const commonTurn = allTurns.length === 1 ? allTurns[0] : null
+  const commonAgent = allAgents.length === 1 ? allAgents[0] : null
+  const contextBits = []
+  if (commonAgent !== null) contextBits.push(agentLabel(commonAgent, t))
+  else if (allAgents.length > 1) contextBits.push(t('agents', { count: allAgents.length }))
+  if (commonTurn !== null) contextBits.push(t('turn', { turn: commonTurn }))
+  else if (allTurns.length > 1) contextBits.push(t('turn', { turn: `${allTurns[0]}–${allTurns[allTurns.length - 1]}` }))
+
   const visible = expanded ? data.files : data.files.slice(0, MAX_ROWS)
   const remaining = data.files.length - MAX_ROWS
 
@@ -82,6 +117,7 @@ export function SessionChanges(props) {
         <span style={styles.title}>{t('title', { total: data.total })}</span>
         <span style={styles.meta}>{t('edits', { edits: data.edits })}</span>
       </header>
+      {contextBits.length > 0 ? <div style={styles.context}>{contextBits.join(' · ')}</div> : null}
       <ul style={styles.list}>
         {visible.map(file => {
           const path = splitPath(file.path)
@@ -98,7 +134,7 @@ export function SessionChanges(props) {
                 <span style={styles.name}>{path.name}</span>
                 {path.dir.length > 0 ? <span style={styles.dir}>{path.dir}</span> : null}
               </button>
-              <span style={styles.detail}>{detailOf(file, t)}</span>
+              <span style={styles.detail}>{detailOf(file, t, commonAgent, commonTurn)}</span>
             </li>
           )
         })}
@@ -130,6 +166,7 @@ const styles = {
   },
   title: { fontWeight: 600 },
   meta: { opacity: 0.65, flexShrink: 0 },
+  context: { marginBottom: '6px', opacity: 0.65, fontSize: '11px' },
   list: {
     listStyle: 'none',
     margin: 0,

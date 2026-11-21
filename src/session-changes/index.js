@@ -123,13 +123,32 @@ function cwdOf(actor) {
 }
 
 /**
- * 展示用 agent 名；没有 name 时退回 id。
- * @param {any} actor - Agent。
- * @returns {string|undefined} 名字。
+ * 判断一个字符串是否像 Session id，避免把它当作成员展示名。
+ * @param {unknown} value - 待判断值。
+ * @returns {boolean} 是否像 Session id。
  */
-function agentNameOf(actor) {
-  const name = actor?.name ?? actor?.id
-  return typeof name === 'string' && name.length > 0 ? name : undefined
+function looksLikeSessionId(value) {
+  if (typeof value !== 'string') return false
+  if (/^session[-_]/i.test(value)) return true
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
+
+/**
+ * 展示用 agent 名。Lead 没有可用名字时显示 Lead，而不是把 session id 抄进卡片；
+ * 子代理没有可用名字时显示 Member。这样同一行不会反复出现 `session-...`。
+ * @param {any} actor - Agent。
+ * @param {any} root - subagent 树根。
+ * @returns {string} 名字。
+ */
+function agentNameOf(actor, root) {
+  const name = actor?.name
+  if (typeof name === 'string' && name.length > 0 && !looksLikeSessionId(name)) return name
+  const actorId = sessionIdOf(actor)
+  const rootId = sessionIdOf(root)
+  if (actor === root || (actorId !== undefined && actorId === rootId)) return 'Lead'
+  const id = actor?.id
+  if (typeof id === 'string' && id.length > 0 && !looksLikeSessionId(id)) return id
+  return 'Member'
 }
 
 /**
@@ -200,6 +219,7 @@ export function createLedger() {
         sessionId,
         cwd,
         updatedAt: Date.now(),
+        latestTurn: 0,
         files: new Map(),
       }
       roots.set(sessionId, root)
@@ -256,7 +276,23 @@ export function createLedger() {
     roots.clear()
   }
 
-  return { record, summary, clear, roots }
+  /**
+   * 记住根 Session 最新开始的一轮；即使该轮没有文件改动，收尾卡片也要能挂到它。
+   * @param {string} sessionId - 根 Session id。
+   * @param {number} turn - 轮次。
+   * @returns {void}
+   */
+  function touchTurn(sessionId, turn) {
+    if (typeof sessionId !== 'string' || sessionId.length === 0) return
+    if (!Number.isFinite(turn) || turn <= 0) return
+    const root = ensure(sessionId, undefined)
+    if (turn > (root.latestTurn ?? 0)) {
+      root.latestTurn = turn
+      root.updatedAt = Date.now()
+    }
+  }
+
+  return { record, touchTurn, summary, clear, roots }
 }
 
 /**
@@ -286,6 +322,7 @@ export function summarizeLedger(root) {
     plugin: PLUGIN_NAME,
     sessionId: root.sessionId,
     updatedAt: root.updatedAt,
+    latestTurn: Number.isFinite(root.latestTurn) && root.latestTurn > 0 ? root.latestTurn : 0,
     total: files.length,
     edits,
     files: files.slice(0, MAX_FILES),
@@ -333,7 +370,7 @@ export function registerRoutes(connectionCtx, ledger) {
     }
     const summary = ledger.summary(sessionId)
     if (summary === null) {
-      return json({ plugin: PLUGIN_NAME, sessionId, updatedAt: null, total: 0, edits: 0, files: [] })
+      return json({ plugin: PLUGIN_NAME, sessionId, updatedAt: null, latestTurn: 0, total: 0, edits: 0, files: [] })
     }
     return json(summary)
   }
@@ -396,7 +433,7 @@ export function apply(ctx, config = {}) {
       const agentCwd = cwdOf(agent) ?? rootCwd
       ledger.record(rootId, rootCwd, {
         path: absolutePath(agentCwd, rawPath),
-        agent: agentNameOf(agent),
+        agent: agentNameOf(agent, root),
         turn: turn ?? 0,
         deleted: deleted === true,
       })
@@ -430,7 +467,12 @@ export function apply(ctx, config = {}) {
     ctx.on('session/event', (session, event) => {
       if (event?.type === 'turn/start') {
         const turn = event.data?.turn
-        if (Number.isFinite(turn)) turns.set(session.id, turn)
+        if (Number.isFinite(turn)) {
+          turns.set(session.id, turn)
+          const header = session?.header
+          const isRootSession = header === undefined || (header.origin !== 'subagent' && (header.delegationDepth ?? 0) === 0)
+          if (isRootSession) ledger.touchTurn(session.id, turn)
+        }
       }
     })
     ctx.on('session/disposed', session => {

@@ -1,6 +1,6 @@
 {
   "name": "dsh-team-dev",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "给 DeepSeek Harness 加一支开发团队：v0.4 起随包 team-dev 采用短路由 + references（L0 契约、质量门、交付面、项目规则发现），含 team-boot、每个 agent 的步数预算守卫、Web 右侧只读团队看板（多团队切换与筛选），以及跨 agent 的会话级改动账本；零运行时依赖，适配 DSH 0.2.2 的 Agent Teams。",
   "type": "module",
   "main": "lib/index.js",

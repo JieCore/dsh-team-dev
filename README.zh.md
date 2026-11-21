@@ -17,7 +17,7 @@
 
 ```bash
 # 1. 在 profile 的 package.json 增加依赖
-#    "dsh-team-dev": "file:/绝对路径/dsh-team-dev-0.4.0.tgz"
+#    "dsh-team-dev": "file:/绝对路径/dsh-team-dev-0.4.1.tgz"
 #    或发布后使用 git/npm 声明
 # 2. 在 dsh.profile.bundles 里列出该 bundle（package.json）
 #    "dsh.profile.bundles": [..., "dsh-team-dev"]
@@ -53,7 +53,7 @@ cd "$DSH_HOME/profiles/web" && pnpm install
 
 - **为什么需要**：DSH 自带的「本轮改动 / 交付卡片」按**顶层会话 × 单轮**工作。会话结束时你只看到收尾轮改动；前几轮的改动散落在各自 turn tail；team-dev 的成员是 subagent，edits 被 `workspace-changes` 的 `eligible()` 排除；收尾轮只汇总不写文件时，最后一张改动卡片为空。Host 重启后旧轮次的摘要也会丢。
 - **账本做什么**：根级 `fs/*-intent` 钩子记录每次写入 / 编辑 / 删除，按 subagent 树的根 Session 归档；同一路径去重，累计涉及的 agent、轮次、编辑次数与删除标记；不改变工具调用决策，记录异常也不阻塞工具。
-- **UI**：`conversation.chat.turnTail` 上的「本会话累计改动 N 个文件」卡片。每个 turn tail 显示**截至该轮**的累计账本；最新一轮即整个会话的完整清单。点文件名走 `openFile` 打开；>6 行可展开；会话没有文件改动时整张卡不渲染。
+- **UI**：`conversation.chat.turnTail` 上的「本会话累计改动 N 个文件」卡片。只在**最新且已结束**的 turn tail 显示一次（`useChat` + `turn.end` 门控），旧轮次的卡片不渲染，不会叠加；根会话显示 `Lead`，子代理显示 `Member` 或真实名字，整卡统一的 agent/轮次提到标题下一行。点文件名走 `openFile` 打开；>6 行可展开；会话没有文件改动时整张卡不渲染。
 - **路由**：`GET /api/dsh-session-changes/summary?sessionId=<rootSessionId>`，只读、`cache-control: no-store`；非法 sessionId 返回 400，未知会话返回 200 空摘要。
 - **边界**：只记文件工具（write / edit / delete）的改动；纯 shell 改动（如 `sed -i`、`git checkout`）不经过 fs intent，不会入账——与 DSH 自带 `workspace-changes` 的限制一致。当前是内存账本，重启即清空；持久化（`.dsh/session-changes/*.json`）留到下一版。
 - **安装**：不需要额外依赖。bundle 的 `cordis.patch.yml` 在同一个 insert 里放两行——`dsh-team-dev` 与 `dsh-team-dev/session-changes`；移除 bundle 时两行一起消失。若只想关掉账本，删掉 `dsh-session-changes` 这一行即可，team-dev 其余能力不受影响。
@@ -140,7 +140,7 @@ DSH 市场支持两条收录渠道：
 
    ```bash
    npm login            # 仅一次；用你自己的账号
-   npm publish          # 发布 dsh-team-dev@0.4.0
+   npm publish          # 发布 dsh-team-dev@0.4.1
    ```
 
 2. **GitHub 镜像（可选）**——公开 GitHub 仓库会进入市场的 `github:` 兼容清单，同时作为源码页。

@@ -164,6 +164,9 @@ const changesZh = {
   less: '收起',
   deleted: '已删除',
   turn: '第 {turn} 轮',
+  lead: 'Lead',
+  member: '成员',
+  agents: '{count} 个成员',
 }
 const changesEn = {
   title: '{total} files changed in this session',
@@ -172,6 +175,9 @@ const changesEn = {
   less: 'Show less',
   deleted: 'deleted',
   turn: 'turn {turn}',
+  lead: 'Lead',
+  member: 'member',
+  agents: '{count} members',
 }
 
 /**

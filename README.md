@@ -15,7 +15,7 @@ Zero runtime dependencies. The browser half is built to `lib/client.js` and load
 
 ```bash
 # 1. add the dependency to the profile's package.json
-#    "dsh-team-dev": "file:/absolute/path/to/dsh-team-dev-0.4.0.tgz"
+#    "dsh-team-dev": "file:/absolute/path/to/dsh-team-dev-0.4.1.tgz"
 #    or a git/npm specifier once published
 # 2. list the bundle in dsh.profile.bundles (package.json)
 #    "dsh.profile.bundles": [..., "dsh-team-dev"]
@@ -51,7 +51,7 @@ and add the `dsh-team-dev` dependency to the profile's `package.json`, then rein
 
 - **Why**: DSH's built-in "changes this turn / deliverables" surface works **per top-level session × single turn**. At the end of a conversation you see only the closing turn; earlier edits sit in their own turn tails; team-dev members are subagents and their edits are excluded by `workspace-changes`' `eligible()`; when the Lead's closing turn only summarizes, the final changes card is empty. A host restart drops the old turn summaries too.
 - **What the ledger does**: root-level `fs/*-intent` hooks record every write / edit / delete under the root of the subagent tree; the same path is de-duplicated and accumulates the agents, turns, edit count and a deleted flag. The ledger never changes the tool decision and any recording failure is swallowed so it cannot block a write.
-- **UI**: a "files changed in this session" card on `conversation.chat.turnTail`. Every turn tail shows the cumulative ledger **as of that turn**; the latest one is the full session list. Clicking a file calls `openFile`; more than six rows collapse behind a toggle; no file changes means no card at all.
+- **UI**: a "files changed in this session" card on `conversation.chat.turnTail`. It renders once, on the **latest closed** turn tail (`useChat` + `turn.end` gate); older tails render nothing, so the card never stacks. The root agent shows as `Lead`, subagents as `Member` or their real name; a uniform agent/turn moves to one context line under the title. Clicking a file calls `openFile`; more than six rows collapse behind a toggle; no file changes means no card at all.
 - **Route**: `GET /api/dsh-session-changes/summary?sessionId=<rootSessionId>`, read-only with `cache-control: no-store`; an invalid session id returns 400, an unknown one returns 200 with an empty summary.
 - **Boundaries**: file-tool mutations only (write / edit / delete). Pure shell edits (`sed -i`, `git checkout`, ...) do not pass through an fs intent and are not recorded — the same limitation as DSH's `workspace-changes`. The ledger is in memory for now; persistence (`.dsh/session-changes/*.json`) is next.
 - **Install**: no extra dependency. The bundle's `cordis.patch.yml` puts two rows in one insert — `dsh-team-dev` and `dsh-team-dev/session-changes`; removing the bundle removes both. To disable only the ledger, drop the `dsh-session-changes` row; the rest of team-dev keeps working.
@@ -151,7 +151,7 @@ Two channels, both supported by the DSH market:
 
    ```bash
    npm login            # once; your own account
-   npm publish          # publishes dsh-team-dev@0.4.0
+   npm publish          # publishes dsh-team-dev@0.4.1
    ```
 
 2. **GitHub mirror (optional)** — a public GitHub repo enters the market's
